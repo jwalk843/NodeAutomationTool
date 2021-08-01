@@ -18,14 +18,3 @@
 
 4. **The playbooks can be called by running the `./run.py` script**
     > **`./run.py`**
-
-    > EXAMPLE: **`upload license http://10.59.51.2/redseal.lic`**
-
-5. **Verify the license is active:**
-    > **`show license`**
-
-6. **Start the services (TAKES 5-7 MINS)**
-    > **`startup server`**
-
-7. **Check the status of the services:**
-    > **`status server`** ( the last service will not start, purposely )
