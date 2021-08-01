@@ -1,0 +1,86 @@
+- name: BAREMETAL {{ iso_image }} ISO ON NODES
+  hosts: "localhost"
+  vars:
+    kit_num:  "{{ lookup('file', '/etc/KITNUM') }}"
+    file_dir: "/opt/cure/ansible_main/node_bios_automation/files/"
+    sum_dir: "/opt/cure/ansible_main/node_bios_automation/files/sum_2.4.0_Linux_x86_64/"
+    iso_image: "{{ iso_image_selection }}"
+
+  tasks:
+  - name: CHECKING FOR AVAILABLE NODES
+    shell: "nmap -n 10.{{kit_num}}.53.1/24 -T4 -Pn -p 623 --open  |grep -E '^Nmap\\Wscan' | awk '{print $NF}'"
+    register: node_ipmi
+
+  - debug:
+      var: node_ipmi.stdout
+
+  - name: Set fact
+    set_fact:
+      node_ipmi: "{{node_ipmi.stdout.split('\n')}}"
+
+  - name: Gather ISOs
+    script: /usr/bin/python /opt/cure/ansible_main/node_bios_automation/files/iso_find.py
+    register: get_isos
+
+  - debug:
+      var: get_isos.stdout_lines
+
+  - name: Copy over ISO's to Satellite
+    shell: "rsync -aP /opt/images/iso/{{ item }} root@satellite:/var/www/html/pub/"
+    with_items: "{{ get_isos.stdout_lines }}"
+    register: iso_copy
+
+
+  - name: ALLOW IPMI PORT VIA FIREWALL-CMD
+    shell: firewall-cmd --add-port=623/tcp
+    register: fw_ipmi
+
+  - debug:
+      msg: "NODES THAT ARE NOT LICENSED WITH OOB KEYS WILL ERROR!"
+
+  - name: MOUNT ISO IMAGE
+    ignore_errors: yes
+    shell: '{{ sum_dir }}sum -i {{ item }} -u ADMIN -p ADMIN -c MountIsoImage --image_url "http://10.58.51.12/pub/{{iso_image}}"'
+    with_items: "{{ node_ipmi }}"
+    register: iso
+
+  - name: TURN OFF UID
+    shell: "ipmitool -l -lanplus -H {{item}} -U ADMIN -P ADMIN raw 0x30 0x0e"
+    with_items: "{{node_ipmi}}"
+
+  - name: TURN OFF NODES
+    until: ipmi_state.stdout == "Chassis Power is off"
+    shell: "ipmitool -H {{item}} -U ADMIN -P ADMIN power off >/dev/null && ipmitool -H {{item}} -U ADMIN -P ADMIN power status"
+    with_items: "{{node_ipmi}}"
+    register: ipmi_state
+    retries: 10
+
+
+  - name: TURN ON NODES
+    until: ipmi_state.stdout == "Chassis Power is off"
+    shell: "ipmitool -H {{item}} -U ADMIN -P ADMIN power on >/dev/null && ipmitool -H {{item}} -U ADMIN -P ADMIN power status"
+    with_items: "{{node_ipmi}}"
+    register: ipmi_state
+    retries: 10
+
+
+  - name: VERIFY NODES HAVE THE IMAGE INSTALLED
+    pause:
+
+
+  - debug:
+      msg: "{{ iso_image }} will have to be manually configured per user requirements"
+
+  - name: Unmount ISO from nodes
+    ignore_errors: yes
+    shell: '{{ sum_dir }}sum -i {{ item }} -u ADMIN -p ADMIN -c UnmountIsoImage'
+    with_items: "{{node_ipmi}}"
+    register: unmounted
+
+
+  - name: CLOSE IPMI PORT VIA FIREWALL-CMD
+    shell: firewall-cmd --remove-port=623/tcp
+    register: fw_ipmi_close
+
+ 
+

@@ -1,0 +1,55 @@
+- name: CONFIGURE BIOS SETTINGS ON BAREMETAL NODES
+  hosts: "localhost"
+  vars:
+    kit_num:  "{{ lookup('file', '/etc/KITNUM') }}"
+    file_dir: "/opt/cure/ansible_main/node_bios_automation/files/"
+    sum_dir: "/opt/cure/ansible_main/node_bios_automation/files/sum_2.4.0_Linux_x86_64/"
+  tasks:
+  - name: CHECKING FOR AVAILABLE NODES
+    shell: "nmap -n 10.{{kit_num}}.53.1/24 -T4 -Pn -p 623 --open  |grep -E '^Nmap\\Wscan' | awk '{print $NF}'"
+    register: node_ipmi
+
+  - debug:
+      var: node_ipmi.stdout
+
+  - name: Set fact
+    set_fact:
+      node_ipmi: "{{node_ipmi.stdout.split('\n')}}"
+
+  - name: Scanning for ISO's
+    script: {{ file_dir }}iso_lookup.py
+    register: iso_lookup
+
+  - name: TURN OFF UID
+    shell: "ipmitool -l -lanplus -H {{item}} -U ADMIN -P ADMIN raw 0x30 0x0e"
+    with_items: "{{node_ipmi}}"
+
+  - name: TURN OFF NODES
+    until: ipmi_state.stdout == "Chassis Power is off"
+    shell: "ipmitool -H {{item}} -U ADMIN -P ADMIN power off >/dev/null && ipmitool -H {{item}} -U ADMIN -P ADMIN power status"
+    with_items: "{{node_ipmi}}"
+    register: ipmi_state
+    retries: 10
+
+  - name: TURN ON NODES
+    until: ipmi_state.stdout == "Chassis Power is off"
+    shell: "ipmitool -H {{item}} -U ADMIN -P ADMIN power on >/dev/null && ipmitool -H {{item}} -U ADMIN -P ADMIN power status"
+    with_items: "{{node_ipmi}}"
+    register: ipmi_state
+    retries: 10
+
+  - name: DROP BIOS CONFIG ON NODES
+    ignore_errors: yes
+    shell: "{{ sum_dir }}sum -i {{ item }} -u ADMIN -p ADMIN -c ChangeBiosCfg --file {{ file_dir }}security_onion_bios_config.xml --reboot --skip_unknown"
+    with_items: "{{node_ipmi}}"
+    register: boot_order
+
+  - debug:
+      msg: "NODES SHOULD NOW HAVE THE BIOS CONFIGURATION FOR BARE METAL PROVISIONING ISOS"
+
+  
+
+
+
+
+
