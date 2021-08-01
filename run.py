@@ -7,8 +7,8 @@ import sys
 if not os.geteuid() == 0:
     sys.exit("\nRun as ROOT user\n")
 
-print "\n************ NODE BIOS AUTOMATION (NBA) TOOL ************"
-print "\nThis tool will be used in automating the BIOS configurations of nodes"
+print "\n************ NODE AUTOMATION TOOL ************"
+print "\nThis tool will be used in automating the configuration and provision of Dell SuperMicro nodes"
 
 # check for network connectivity
 
